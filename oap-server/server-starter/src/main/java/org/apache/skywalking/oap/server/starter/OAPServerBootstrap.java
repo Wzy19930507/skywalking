@@ -36,25 +36,34 @@ import static org.apache.skywalking.oap.server.library.module.TerminalFriendlyTa
 @Slf4j
 public class OAPServerBootstrap {
     public static void start() {
+        // 模块管理器，管理所有模块的定义
         ModuleManager manager = new ModuleManager("Apache SkyWalking OAP");
+        // 拼接成对的参数为固定的格式
         final TerminalFriendlyTable bootingParameters = manager.getBootingParameters();
 
+        // 初始化模式，noInit Init
         String mode = System.getProperty("mode");
         RunningMode.setMode(mode);
 
+        // 初始化配置加载器（加载 application.yml，路径固定）
         ApplicationConfigLoader configLoader = new ApplicationConfigLoader(bootingParameters);
 
         bootingParameters.addRow(new Row("Running Mode", mode));
         bootingParameters.addRow(new Row("Version", Version.CURRENT.toString()));
 
         try {
+            // 加载 application.yml，环境变量优先 ，并 log.info 引导参数
             ApplicationConfiguration applicationConfiguration = configLoader.load();
+            // 加载 module 以及 provider，执行 module 的 prepare 和 start 方法
+            // prepare 时，会为 module 配置 provider，并调用 provider 的 prepare 方法，prepare 时会注册 service
+            // start 时，检查 ModuleDefine 依赖的 Service 是否注册，动态监听配置，启动服务
             manager.init(applicationConfiguration);
 
+            // 将启动时间设置到自监控中
             manager.find(CoreModule.NAME)
-                   .provider()
-                   .getService(ServerStatusService.class)
-                   .bootedNow(configLoader.getResolvedConfigurations(), System.currentTimeMillis());
+                    .provider()
+                    .getService(ServerStatusService.class)
+                    .bootedNow(configLoader.getResolvedConfigurations(), System.currentTimeMillis());
 
             if (RunningMode.isInitMode()) {
                 log.info("OAP starts up in init mode successfully, exit now...");
@@ -64,6 +73,7 @@ public class OAPServerBootstrap {
             log.error(t.getMessage(), t);
             System.exit(1);
         } finally {
+            // 输出引导配置
             log.info(bootingParameters.toString());
         }
     }

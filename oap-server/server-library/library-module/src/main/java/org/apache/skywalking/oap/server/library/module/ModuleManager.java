@@ -36,28 +36,32 @@ public class ModuleManager implements ModuleDefineHolder {
 
     public ModuleManager(String description) {
         bootingParameters = new TerminalFriendlyTable(
-            String.format("The key booting parameters of %s are listed as following.", description));
+                String.format("The key booting parameters of %s are listed as following.", description));
     }
 
     /**
      * Init the given modules
      */
     public void init(ApplicationConfiguration applicationConfiguration)
-        throws ModuleNotFoundException, ProviderNotFoundException, ServiceNotProvidedException,
-        CycleDependencyException, ModuleConfigException, ModuleStartException {
+            throws ModuleNotFoundException, ProviderNotFoundException, ServiceNotProvidedException,
+            CycleDependencyException, ModuleConfigException, ModuleStartException {
 
         String[] moduleNames = applicationConfiguration.moduleList();
+        // 加载 ModuleDefine
         ServiceLoader<ModuleDefine> moduleServiceLoader = ServiceLoader.load(ModuleDefine.class);
+        // 加载 ModuleProvider：Module 实现
         ServiceLoader<ModuleProvider> moduleProviderLoader = ServiceLoader.load(ModuleProvider.class);
 
         HashSet<String> moduleSet = new HashSet<>(Arrays.asList(moduleNames));
         for (ModuleDefine module : moduleServiceLoader) {
             if (moduleSet.contains(module.name())) {
+                // 配置 ModuleDefine 的实现 ModuleProvider，调用 ModuleProvider 的 prepare 方法
+                // 调用 ModuleProvider 时会创建并注册 ModuleDefine 的 Service
                 module.prepare(
-                    this,
-                    applicationConfiguration.getModuleConfiguration(module.name()),
-                    moduleProviderLoader,
-                    bootingParameters
+                        this,
+                        applicationConfiguration.getModuleConfiguration(module.name()),
+                        moduleProviderLoader,
+                        bootingParameters
                 );
                 loadedModules.put(module.name(), module);
                 moduleSet.remove(module.name());
@@ -70,8 +74,10 @@ public class ModuleManager implements ModuleDefineHolder {
             throw new ModuleNotFoundException(moduleSet.toString() + " missing.");
         }
 
+        // 制定启动顺序
         BootstrapFlow bootstrapFlow = new BootstrapFlow(loadedModules);
 
+        // 检查 ModuleDefine 必须依赖的 Service，动态监听配置，启动服务
         bootstrapFlow.start(this);
         bootstrapFlow.notifyAfterCompleted();
     }
